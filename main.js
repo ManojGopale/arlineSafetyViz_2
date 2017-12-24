@@ -1,11 +1,12 @@
 // svg parameters
-//--Create a brush to select multiple elements and display them in the table
+//--Done - Create a brush to select multiple elements and display them in the table
 //--Then while hovering over the table mark them in the plot
 
 var svgHeight = 200;
 var svgWidth = 500;
 
 var dataD = [];
+var dCount = 0;
 
 padding = {"bottom" : 40, "top" : 10, "right": 10, "left" :40};
 paddingAxis = {"bottom": 15, "left": 15};
@@ -245,10 +246,6 @@ d3.csv("airline-safety.csv", function(error, data) {
 			&& e[0][1] <= yScale(d.fatal_accidents_85_99) && e[1][1] >= yScale(d.fatal_accidents_85_99) 
 			);
 		});
-
-		// Create a table of all the selected circles
-		var tableSel = d3.selectAll(".hidden");
-		//debugger;
 	}
 
 	function brushEnd() {
@@ -258,6 +255,33 @@ d3.csv("airline-safety.csv", function(error, data) {
 		//Deselecting all the circles on no selection
 		if(e == null ) {
 			d3.selectAll("circle").classed("hidden", false);
+			// Removing the table if no circles are selected
+			d3.selectAll(".Rows").remove();
+		} else {
+			//Remove the table before creating a new one
+			d3.selectAll(".Rows").remove();
+			// Create a table of all the selected circles
+			// Do not create table in brush, since thats called multiple times, you will end up with multiple rows in 
+			// your table.
+			var tableSel = d3.selectAll(".hidden");
+			console.log("Array= " + d3.selectAll(".hidden")._groups);
+			var rows = tbody.selectAll("empty")
+				.data(d3.selectAll(".circle1.hidden").data())
+				.enter()
+				.append("tr")
+				.attr("class", "Rows");
+
+			var cells = rows.selectAll("empty")
+				.data(function(row) {
+					return header.map(function(column) {
+						return {column: column, value:row[column]};
+					})
+				})
+				.enter()
+				.append("td")
+				.text(function(d) {
+					return d.value;
+				});
 		}
 		
 	}
@@ -328,7 +352,10 @@ d3.csv("airline-safety.csv", function(error, data) {
 	var rScale = d3.scaleSqrt().domain([rExtent[0], rExtent[1]]).range([4,10]);
 	var colorScale = d3.scaleLinear().domain([rExtent[0], rExtent[1]]).range(['#fee5d9', '#a50f15']);
 
-	var brush = d3.brush().on("end", brushend);
+	var brush = d3.brush()
+		.on("start", brushStart)
+		.on("brush", brushMove)
+		.on("end", brushEnd);
 	
 	d3.select("#svgPlotIFF2").append("g").attr("class", "brush").call(brush);
 
@@ -473,47 +500,65 @@ d3.csv("airline-safety.csv", function(error, data) {
 	var idleTimeout, 
 			idleDelay=350;
 
-	// function brushend
 	// Need to be inside the csv call, for preserving the scope of xExtent and yExtent
-	function brushend() {
-		if(!d3.event.sourceEvent) return;
-		eventt = d3.event.sourceEvent;
-		//console.log ("eventt= " + eventt);
-		//debugger;
-		s = d3.event.selection;
-		if (!s) {
-			if (!idleTimeout) return idleTimeout = setTimeout(idled, idleDelay);
-			console.log ("No Selection");
-			//console.log("xExtent= " + xExtent);
-			
-			// Going back to original domain when nothing is selected
-			xScale.domain(xExtent);
-			yScale.domain(yExtent);
-		} else {
-			//console.log("s= " + s +", s[0]= " + s[0] + ", s[1]= " + s[1] + " , this= " + this);
-			var x0 = xScale.invert(s[0][0]);
-			var y0 = yScale.invert(s[0][1]);
-		
-			var x1 = xScale.invert(s[1][0]);
-			var y1 = yScale.invert(s[1][1]);
-		
-			//console.log("x0= " + x0 + ", x1= " + x1 + ", y0= " + y0 + ", y1= " + y1);
-		
-			// New domain after brushing to zoom in to these points
-			xScale.domain([x0, x1]);
-			yScale.domain([y1, y0]);
-			svg2.select(".brush").call(brush.move, null);
+	var prevBrushSelection ;
+	function brushStart() {
+		if (prevBrushSelection != this) {
+			// CLear the previous brush
+			d3.select(prevBrushSelection).call(brush.move, null);
+			prevBrushSelection = this;
 		}
+	}
 
-		// Zoom to the new domain
-		zoom();
-		//debugger;
+	function brushMove() {
+		// Select all the circles in the brush
+		//This gives the x0 y0, x1 y1 of the brush
+		var e = d3.brushSelection(this);
+		console.log("-----brushMove--------");
+		d3.selectAll("circle").classed("hidden", function(d) {
+			console.log("d =" + d + ", e= " + e);
+			return ( e[0][0]  <= xScale(d.incidents_00_14) && e[1][0] >= xScale(d.incidents_00_14) 
+			&& e[0][1] <= yScale(d.fatal_accidents_00_14) && e[1][1] >= yScale(d.fatal_accidents_00_14) 
+			);
+		});
+	}
 
-		// check https://github.com/d3/d3-brush/issues/10 
-		// and https://github.com/d3/d3-brush/issues/9
-		// example https://bl.ocks.org/mbostock/f48fcdb929a620ed97877e4678ab15e6
-		// brush events https://bl.ocks.org/mbostock/15a9eecf0b29db92f12ca823cfbbce0a
+	function brushEnd() {
+		// This is activated on double clicking null on svg
+		console.log("---- Brush End -------");
+		var e = d3.brushSelection(this);
+		//Deselecting all the circles on no selection
+		if(e == null ) {
+			d3.selectAll("circle").classed("hidden", false);
+			// Removing the table if no circles are selected
+			d3.selectAll(".Rows").remove();
+		} else {
+			//Remove the table before creating a new one
+			d3.selectAll(".Rows").remove();
+			// Create a table of all the selected circles
+			// Do not create table in brush, since thats called multiple times, you will end up with multiple rows in 
+			// your table.
+			var tableSel = d3.selectAll(".hidden");
+			console.log("Array= " + d3.selectAll(".hidden")._groups);
+			var rows = tbody.selectAll("empty")
+				.data(d3.selectAll(".circle1.hidden").data())
+				.enter()
+				.append("tr")
+				.attr("class", "Rows");
 
+			var cells = rows.selectAll("empty")
+				.data(function(row) {
+					return header.map(function(column) {
+						return {column: column, value:row[column]};
+					})
+				})
+				.enter()
+				.append("td")
+				.text(function(d) {
+					return d.value;
+				});
+		}
+		
 	}
 
 	function idled() {
